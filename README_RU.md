@@ -24,7 +24,7 @@
 
 ## Архитектура репозитория
 
-GGGtext
+```text
 src/main.rs        Точка входа, диспетчер команд и автоопределение режима write/read
 src/core/          Единое системное ядро I/O:
   buf.rs           Безопасные LE-ридеры границ (u16le, u32le, u64le, bytes)
@@ -39,7 +39,7 @@ src/write/         Подпрограмма write и конвертеры:
   mod.rs           Дерево Node, очередь действий, overlay/append/legacy EROFS-ребилдеры
   ext4.rs          Copy-on-write сборщик ext4, планировщик групп, compact и shared-blocks
   convert.rs       Стриминговые конвертеры форматов без модификации дерева файлов
-GGG
+```
 
 ---
 
@@ -79,9 +79,9 @@ GGG
 * Rust toolchain (MSRV 1.85+ или стабильный выпуск edition 2024)[cite: 5].
 * Сборщик Cargo[cite: 5].
 
-GGGbash
+```bash
 # Клонирование репозитория
-git clone https://github.com/your-org/image-worker.git
+git clone https://github.com/leegarchat/image-worker.git
 cd image-worker
 
 # Сборка оптимизированного релизного бинарника
@@ -89,7 +89,7 @@ cargo build --release
 
 # Прогон комплексного набора модульных тестов
 cargo test
-GGG
+```
 
 Исполняемый файл создаётся по пути: `target/release/image-worker`.
 
@@ -99,11 +99,11 @@ GGG
 
 Утилита автоматически определяет требуемую подпрограмму: наличие флагов файловых модификаций переключает движок в режим `write`, в остальных случаях активируется инспектор `read`[cite: 5]:
 
-GGGtext
+```text
 image-worker read [ОПЦИИ] <образ|-> [внутренний_путь]
 image-worker write <вход> <выход> ДЕЙСТВИЕ... [ОПЦИИ]
 image-worker write <вход> <выход> --convert-to <erofs|ext4> [ОПЦИИ]
-GGG
+```
 
 Символ `-` вместо пути используется для чтения из `stdin` или потокового вывода в `stdout`[cite: 5, 6].
 
@@ -124,7 +124,7 @@ GGG
 * `--stdin` — Чтение входного образа из стандартного потока ввода[cite: 5, 6].
 
 **Примеры применения:**
-GGGbash
+```bash
 # Диагностика структуры и типа контейнера
 image-worker read --info vendor.img
 
@@ -136,7 +136,7 @@ image-worker read --find="*fstab*" -Z vendor.img /
 
 # Извлечение файла build.prop напрямую в терминал
 image-worker read --cat vendor.img /etc/build.prop > build.prop
-GGG
+```
 
 ---
 
@@ -167,7 +167,7 @@ GGG
 * `--sparse-output` — Генерация выходного файла в контейнере Android Sparse (`simg`)[cite: 5, 6].
 
 **Примеры применения:**
-GGGbash
+```bash
 # Замена системного файла с назначением правильного контекста SELinux
 image-worker write vendor.img out.img \
     --add hosts /etc/hosts --mode 0644 --context u:object_r:vendor_configs_file:s0
@@ -182,22 +182,22 @@ image-worker write vendor.img out.img -R /app/PrebuiltApp --compact
 # Полная перепаковка EROFS с многопоточным сжатием Deflate
 image-worker write vendor_erofs.img out_deflate.img \
     --rm /etc/unneeded.xml --compress deflate
-GGG
+```
 
 ---
 
 ### 3. Подпрограмма `convert` (Сквозная конвертация форматов)
 
-GGGtext
+```text
 image-worker write <вход> <выход> --convert-to <erofs|ext4> [ОПЦИИ]
-GGG
+```
 
 * `ext4 -> erofs` — Перекодирование файлового дерева в EROFS[cite: 5, 6]. По умолчанию активируется компрессия LZ4 (`--compress lz4`)[cite: 5]. Метки SELinux собираются в компактную разделяемую xattr-таблицу[cite: 5, 6].
 * `erofs -> ext4` — Чистая пересборка EROFS-образа в блочную структуру ext4[cite: 5, 6]. Все символические ссылки, типы узлов, права и контексты безопасности переносятся идентично байт-в-байт[cite: 4, 6]. Полученный образ проходит 5 проходов `e2fsck -fn`[cite: 4, 6].
 * `raw <-> sparse` (одинаковая ФС) — Потоковая трансформация контейнера без разбора и пересборки файлового дерева[cite: 5, 6].
 
 **Примеры применения:**
-GGGbash
+```bash
 # Конвертация раздела ext4 в EROFS со сжатием LZ4
 image-worker write vendor_ext4.img vendor_erofs.img --convert-to erofs
 
@@ -212,7 +212,7 @@ image-worker write vendor.sparse.img vendor.raw.img --convert-to erofs
 
 # Упаковка raw-образа в Android Sparse контейнер
 image-worker write vendor.raw.img vendor.sparse.img --convert-to ext4 --sparse-output
-GGG
+```
 
 ---
 
@@ -227,13 +227,13 @@ GGG
 ### Решение
 Утилита строго соблюдает стандарт POSIX: при формировании временных очередей приоритет отдаётся переменной окружения `TMPDIR`[cite: 5]. Перед масштабными операциями перенаправляйте временный каталог на физический накопитель:
 
-GGGbash
+```bash
 # Разовое выполнение команды с временным каталогом на NVMe/SSD:
 TMPDIR=/mnt/nvme_disk/temp image-worker write vendor.img out.img --convert-to erofs
 
 # Экспорт переменной на всю сессию терминала или внутри shell-скрипта:
 export TMPDIR=~/build_workspace/tmp
-GGG
+```
 
 ---
 
