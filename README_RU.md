@@ -78,20 +78,33 @@ src/write/         Подпрограмма write и конвертеры:
 **Системные требования**:
 * Rust toolchain (MSRV 1.85+ или стабильный выпуск edition 2024).
 * Сборщик Cargo.
+* Для статических сборок: musl-тулчейны или `cross` (подсказки по установке — в `build.sh --help`).
 
 ```bash
 # Клонирование репозитория
 git clone https://github.com/leegarchat/image-worker.git
 cd image-worker
 
-# Сборка оптимизированного релизного бинарника
+# Быстрая локальная сборка (хостовый таргет, динамическая)
 cargo build --release
+# -> target/release/image-worker
+
+# Статические мультиархитектурные сборки через build.sh (musl, stripped):
+#   --cargo | --cross | --auto   метод сборки (auto = cross при наличии контейнеров, иначе cargo)
+#   --arch all|x64|x86|arm64|arm32
+./build.sh --cargo --arch x64      # x86_64-unknown-linux-musl
+./build.sh --cross --arch arm64    # aarch64 через контейнеры
+./build.sh --arch all              # x86_64, x86, aarch64, armv7
 
 # Прогон комплексного набора модульных тестов
 cargo test
 ```
 
-Исполняемый файл создаётся по пути: `target/release/image-worker`.
+Выходы сборки:
+
+* `dist/` — статические бинарники `image-worker-linux-*` (x86_64, x86, arm64, arm32).
+* `target/push/` — push-копии `{name}_{arch}` (`x64`, `x86`, `arm64`, `arm32`), обновляются под собранную архитектуру, например для устройств:
+  `adb push target/push/image-worker_arm64 /data/local/` (`dist/` и `target/` в gitignore).
 
 ---
 

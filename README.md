@@ -78,20 +78,33 @@ To prevent denial-of-service, unbounded stack recursion, and OOM panics on corru
 **Prerequisites**:
 * Rust toolchain (MSRV 1.85+ or stable release edition 2024).
 * Cargo package manager.
+* For static builds: musl toolchains or `cross` (see `build.sh --help` for per-distro install hints).
 
 ```bash
 # Clone the repository
 git clone https://github.com/leegarchat/image-worker.git
 cd image-worker
 
-# Build optimized release binary
+# Fast local build (host target, dynamic)
 cargo build --release
+# -> target/release/image-worker
+
+# Static multi-arch builds via build.sh (musl, stripped):
+#   --cargo | --cross | --auto   build method (auto = cross if containers exist, else cargo)
+#   --arch all|x64|x86|arm64|arm32
+./build.sh --cargo --arch x64      # x86_64-unknown-linux-musl
+./build.sh --cross --arch arm64    # aarch64 via containers
+./build.sh --arch all              # x86_64, x86, aarch64, armv7
 
 # Run comprehensive test suite
 cargo test
 ```
 
-The compiled binary will be located at `target/release/image-worker`.
+Build outputs:
+
+* `dist/` — static binaries `image-worker-linux-*` (x86_64, x86, arm64, arm32).
+* `target/push/` — push-ready copies `{name}_{arch}` (`x64`, `x86`, `arm64`, `arm32`), refreshed per built arch, e.g. for devices:
+  `adb push target/push/image-worker_arm64 /data/local/` (both `dist/` and `target/` are gitignored).
 
 ---
 
