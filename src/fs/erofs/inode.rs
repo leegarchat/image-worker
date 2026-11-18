@@ -1,4 +1,5 @@
 use super::Superblock;
+use super::chunk;
 use super::compress;
 use crate::core::{Error, Image, buf};
 use std::io::Write;
@@ -33,6 +34,12 @@ pub struct Inode {
     pub xattr_size: u64,
     /// On-disk inode body size: 32 (compact) or 64 (extended).
     pub inode_size: u64,
+    /// Chunk summary word (`i_u` low half) for `LAYOUT_CHUNK_BASED`
+    /// inodes: chunk-size shift + entry-format bits. Zero otherwise.
+    pub chunk_format: u16,
+    /// Bytes per chunk (`blocksize << chunkbits`) for
+    /// `LAYOUT_CHUNK_BASED` inodes. Zero otherwise.
+    pub chunk_size: u64,
 }
 
 pub fn read(fs: &Superblock, image: &mut Image, nid: u64) -> Result<Inode, Error> {
@@ -73,9 +80,35 @@ pub fn read(fs: &Superblock, image: &mut Image, nid: u64) -> Result<Inode, Error
     } else {
         buf::u16le(&compact, 26)? as u32
     };
+    // Chunk summary (`i_u` low half) for chunk-based inodes; the raw
+    // block address field for every other layout.
+    let chunk_format = if layout == chunk::LAYOUT_CHUNK_BASED {
+        buf::u16le(&compact, 16)?
+    } else {
+        0
+    };
+    if chunk_format & !chunk::CHUNK_FORMAT_ALL != 0 {
+        return Err(Error::invalid(format!(
+            "unsupported EROFS chunk format {:#x}",
+            chunk_format
+        )));
+    }
+    let chunk_size = if layout == chunk::LAYOUT_CHUNK_BASED {
+        fs.block_size
+            .checked_shl((chunk_format & chunk::CHUNK_FORMAT_BLKBITS_MASK) as u32)
+            .ok_or_else(|| Error::invalid("invalid EROFS chunk size"))?
+    } else {
+        0
+    };
     // Map header of compressed-compact inodes is 8-byte aligned, everything
-    // else is 4-byte aligned after inode + xattrs.
+    // else is 4-byte aligned after inode + xattrs — except the 8-byte
+    // chunk-index table, which rounds up to 8 (erofs-utils rounds the
+    // table base up to the entry size).
     let data_offset = if layout == LAYOUT_COMPRESSED_COMPACT {
+        (offset + inode_size + xattr_size + 7) & !7
+    } else if layout == chunk::LAYOUT_CHUNK_BASED
+        && chunk_format & chunk::CHUNK_FORMAT_INDEXES != 0
+    {
         (offset + inode_size + xattr_size + 7) & !7
     } else {
         (offset + inode_size + xattr_size + 3) & !3
@@ -99,6 +132,8 @@ pub fn read(fs: &Superblock, image: &mut Image, nid: u64) -> Result<Inode, Error
         cluster_bits: map_header[7] & 7,
         xattr_size,
         inode_size,
+        chunk_format,
+        chunk_size,
     })
 }
 
@@ -142,6 +177,9 @@ pub fn read_data(fs: &Superblock, image: &mut Image, inode: &Inode) -> Result<Ve
         }
         LAYOUT_COMPRESSED_COMPACT => {
             compress::read_compact_data(fs, image, inode, &mut data)?;
+        }
+        chunk::LAYOUT_CHUNK_BASED => {
+            chunk::read_data(fs, image, inode, &mut data)?;
         }
         other => {
             return Err(Error::invalid(format!(
@@ -258,6 +296,7 @@ pub fn read_range(
             }
             Ok(done)
         }
+        chunk::LAYOUT_CHUNK_BASED => chunk::read_range(fs, image, inode, offset, buf),
         other => Err(Error::invalid(format!(
             "unsupported EROFS data layout {other}"
         ))),
@@ -329,6 +368,7 @@ pub fn read_data_streaming(
             }
             Ok(())
         }
+        chunk::LAYOUT_CHUNK_BASED => chunk::stream(fs, image, inode, out),
         other => Err(Error::invalid(format!(
             "unsupported EROFS data layout {other}"
         ))),

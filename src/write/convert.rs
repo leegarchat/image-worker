@@ -90,9 +90,11 @@ impl BlockSource for ErofsBlockSource<'_> {
             )?;
             return Ok(());
         }
-        if node.layout == 2 {
-            // Inline files need no index: serve positionally straight
-            // through the shared range reader (also bounds-checks).
+        if node.layout == 2 || node.layout == crate::fs::erofs::chunk::LAYOUT_CHUNK_BASED
+        {
+            // Inline and chunk-based files need no cached index: serve
+            // positionally straight through the shared range reader (also
+            // bounds-checks; chunk holes decode as zeros there).
             let fs_sb = self.source.fs_superblock();
             let fi = crate::fs::erofs::inode::read(
                 &fs_sb,

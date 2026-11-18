@@ -1,3 +1,4 @@
+pub mod chunk;
 pub mod compress;
 pub mod dir;
 pub mod inode;
